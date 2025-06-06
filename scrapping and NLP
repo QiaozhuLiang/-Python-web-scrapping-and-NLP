@@ -1,0 +1,136 @@
+'''
+   1. scrap commments of a HUAWEI product from Chinese online shopping website
+   2. cleanning all the raw comments using JIEBA-a package designed to cut chinese words  (NLP)
+   3. create a word cloud for all these comments
+'''
+
+# @author: Qiaozhu Liang, Python Programming
+
+
+'''web scrapping'''
+import numpy as np
+import pandas as pd
+import requests
+import json
+#create the function for web scrappting
+def get_comments():
+    url0=u'https://api.m.jd.com/?appid=item-v3&functionId=pc_club_productPageComments&client=pc&clientVersion=1.0.0&t=1685532759901&loginType=3&uuid=122270672.16855293864961141695896.1685529386.1685529386.1685529387.1&productId=100054651267&score=0&sortType=5&page={0}&pageSize=10&isShadowSku=0&fold=1&bbtf=&shield='
+    #mimic visting as a website
+    header={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'}
+    
+    for i in range(100):
+        url=url0.format(i)
+        response=requests.get(url,headers=header)
+
+        # standardlize the format of json comments we got:
+        json_response=response.text.replace('fetchJSON_comment98(','').replace(');','')
+
+        #transfer json into dict:
+        json_response=json.loads(json_response)['comments']
+
+        #get the info we need:
+        columns=['id','nickname','referenceTime','creationTime','referenceId','productColor','productSize','score','content']
+        end_columns=['userId','userName','buyTime','commentTime','productId','productColor','productSize','score','comment','afterComment']
+
+        #use a loop to name each info
+        for j in range(10):
+            userid=json_response[j][columns[0]]
+            username=json_response[j][columns[1]]
+            buytime=json_response[j][columns[2]]
+            commenttime=json_response[j][columns[3]]
+            productid=json_response[j][columns[4]]
+            productcolor=json_response[j][columns[5]]
+            productsize=json_response[j][columns[6]]
+            score=json_response[j][columns[7]]
+            comment=json_response[j][columns[8]]
+
+            #deal with the situation that some users don't give after comments
+            try:
+                aftercomment=json_response[j]['afterUserComment']['content']
+            except:
+                aftercomment=''
+
+            #put all the obs above into one list
+            comment_one=[userid,username,buytime,commenttime,productid,productcolor,productsize,score,comment,aftercomment]
+            yield (comment_one)
+
+#save to a .csv file
+import csv
+path=r'comments.csv'
+end_columns=['userId','userName','buyTime','commentTime','productId','productColor','productSize','score','comment','afterComment']
+def SaveCsv():
+    comments=open(path,'w',newline='',encoding='utf-8-sig')
+    w=csv.writer(comments)
+    w.writerow(end_columns)
+    comments=get_comments()
+    for comment in comments:
+        w.writerow(comment)
+    comments.close()
+
+SaveCsv()
+
+
+'''[NLP] clean and analyze all the comments'''
+import jieba
+import wordcloud
+from PIL import Image
+import matplotlib.pyplot as plt
+
+# data cleaning
+#merge first comment and after comments
+raw_data=pd.read_csv('comments.csv')
+raw_data['text']=raw_data.apply(lambda x:str(x['comment'])+';'+str(x['afterComment']),axis=1)
+
+#delete the default comments provided by the website
+def del_list(str1):
+    del_list=['运行速度：','屏幕效果：','散热性能：','外形外观：','轻薄程度：','其他特色：']
+    for i in del_list:
+        str1=str1.replace(i,'')
+    return str1
+raw_data['text']=raw_data['text'].apply(del_list)
+
+#delete the stop words, such as the name of the products, comma, "very much","HUAWEI"
+stopwords_dic=open(r'stop_words.txt','rb')
+stopwords_content=stopwords_dic.read()
+stopwords_lst=stopwords_content.splitlines()
+stopwords_dic.close()
+
+# update the stop words we have and redo the stop-word-deleting process
+add_stopword=['，',';','nan','\n','。','&','！','、','P60pro','?','.','*','真的没有','已经','拿到','华为','京东','手机','非常']
+stopwords_lst.extend(add_stopword)
+
+#cut the words
+raw_data['text_cut']=raw_data['text'].apply(lambda x:[i for i in set(jieba.cut(x)) if i not in stopwords_lst])
+
+#put all the cleaned words into a list
+text=[]
+for i in raw_data['text_cut']:
+    text.extend(i)   
+
+
+
+'''create a dict reflecting the frequency of each words'''
+dic=dict()
+for i in text:
+    if len(i) !=1:
+        dic[i]=text.count(i)
+        
+#dic = sorted(dic.items(),key=lambda x:x[1],reverse = True) 
+
+
+
+
+'''create the word cloud'''
+mask=np.array(Image.open(r'屏幕截图 2023-06-02 173557.jpg')) #the backgroud
+wc=wordcloud.WordCloud(font_path='C:/Windows/Fonts/simhei.ttf',  #font
+                      mask=mask,  #background
+                      max_words=100,  #max words shown
+                      max_font_size=150, #max size
+                      background_color='white') 
+wc.generate_from_frequencies(dic)  #create the word cloud from dict
+image_colors=wordcloud.ImageColorGenerator(mask)  #color
+wc.recolor(color_func=image_colors) 
+plt.figure(figsize=(6,6))
+plt.imshow(wc)  #show the word cloud
+plt.axis('off') 
+plt.show()
