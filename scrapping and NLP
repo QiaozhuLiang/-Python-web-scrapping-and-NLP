@@ -1,6 +1,6 @@
 '''
-   1. scrap commments of a HUAWEI product from Chinese online shopping website
-   2. cleanning all the raw comments using JIEBA-a package designed to cut chinese words  (NLP)
+   1. scrap comments of a HUAWEI product from Chinese online shopping website
+   2. clean all the raw comments using JIEBA-a package designed to cut Chinese words  (NLP)
    3. create a word cloud for all these comments
 '''
 
